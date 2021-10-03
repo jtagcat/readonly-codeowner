@@ -51,3 +51,55 @@ This is a who to ping in case we can't go further than the repo root (traversing
  - what happens when repo settings need at least 10 reviews, does the bot bypass it (how?)?
  - display reviews needed as a test (pending/running)
  - countdown 5m as an undo buffer when all reviews are met (can we do checkmark?), then bot merges
+
+
+## Implementation
+- code owners icon is not shown for non-write users, sucks
+
+Github Actions can't do this:
+ - No Checks ('external tests', before merging, blockers)
+ - No good way to have one permissions file
+
+### Github App
+#### Permissions
+- Repository permissions: checks: rw
+  - status indicators and blocking
+- Repository permissions: pulls: rw
+  - get files
+  - get approvals
+  - ask for reviews
+  - get author
+  - merge
+- Repository permissions: issues: rw
+  - for commenting on pulls
+- Repository permissions: metadata: ro
+  - get members of orgs/groups
+  - get users/groups? with write access to the repo
+- Repository permissions: single file: ro
+  - `.github/CODEOWNERS_ro` — source for our definitions
+
+#### Workflow
+1. Incoming PR
+1. Get merge requirements
+  1. single file: config file
+  1. PR list of files affected
+  1. for each file, find definition (may be fallback) to follow 
+  1. account for recursive: rule:`dir/` and files:`dir/foo`,`dir/bar`, merge them
+1. order rules on most specific match first
+  1. first by match outreach (did we get a match, or had to go up in the tree searching for CODEOWNER files)
+  1. result sort by directory depth
+  1. then by user-set priority (not documented above!)
+  (result sort priority is the opposite)
+1. Start keeping tabs on how many reviews we need or have, we might have enough already (self-approve)
+  - display status in a check
+  - start merge countdown
+  - merge
+3. request groups to review in order OR all at the same time
+  1. For each file (group), we have usernames/groups/orgs on who can review, mention them
+  2. For sequential review, don't clutter up the comments: delete previous comments or edit them (does it mention?)
+4. An approval is submitted
+  1. Check if it's from an allowed user:
+    1. username match
+    1. is part of a group/org
+  1. Update keeping tabs
+  2. Ping the next group (if sequential)
